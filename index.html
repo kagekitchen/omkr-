@@ -266,7 +266,11 @@ audio { width:100%; border-radius:8px; margin-bottom:10px; accent-color:var(--ra
 </main>
 
 <script>
-const PROXY = 'https://api.allorigins.win/get?url=';
+const PROXIES = [
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
 const LIST_URL = 'https://arrow2nd.github.io/omkr-radio/list.json';
 const EP_BASE  = 'https://arrow2nd.github.io/omkr-radio/episodes/';
 
@@ -290,10 +294,19 @@ function getText(id) { const el=document.getElementById(id); return el?el.value:
 
 // ── RSS ──
 async function fetchRSS(url) {
-  const res = await fetch(PROXY+encodeURIComponent(url));
-  const j = await res.json();
-  const doc = new DOMParser().parseFromString(j.contents,'text/xml');
-  return Array.from(doc.querySelectorAll('item'));
+  let lastErr;
+  for (const proxyFn of PROXIES) {
+    try {
+      const res = await fetch(proxyFn(url));
+      const text = await res.text();
+      let xml = text;
+      try { const j = JSON.parse(text); if(j.contents) xml = j.contents; } catch(e){}
+      const doc = new DOMParser().parseFromString(xml,'text/xml');
+      const items = Array.from(doc.querySelectorAll('item'));
+      if(items.length > 0) return items;
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr || new Error('全プロキシ失敗');
 }
 
 function parseItem(item) {
