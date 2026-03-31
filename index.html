@@ -248,8 +248,8 @@ main { max-width:700px; margin:0 auto; padding:16px; }
 </div>
 
 <script>
-const LIST_URL = 'https://arrow2nd.github.io/omkr-radio/list.json';
-const EP_BASE  = 'https://arrow2nd.github.io/omkr-radio/episodes/';
+const LIST_URL   = 'https://arrow2nd.github.io/omkr-radio/list.json';
+const RSS_BASE   = 'https://arrow2nd.github.io/omkr-radio/podcast/';
 
 let shows = [], curShow = null, curEps = [], curIdx = 0, autoplay = true;
 const audio = document.getElementById('audioEl');
@@ -325,13 +325,26 @@ async function selectShow(show, cardEl) {
   setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'start'}), 100);
 
   try {
-    const res = await fetch(EP_BASE + show.id + '.json');
-    curEps = await res.json();
-    curEps.sort((a,b) => (a.number||0)-(b.number||0));
+    const rssUrl = RSS_BASE + show.id + '.rss';
+    const res = await fetch(rssUrl);
+    const text = await res.text();
+    const doc = new DOMParser().parseFromString(text, 'text/xml');
+    const items = Array.from(doc.querySelectorAll('item'));
+    if(items.length === 0) throw new Error('no items');
+
+    curEps = items.map((item, i) => {
+      const title     = item.querySelector('title')?.textContent.trim() || ('第'+(i+1)+'回');
+      const enclosure = item.querySelector('enclosure');
+      const source    = enclosure?.getAttribute('url') || '';
+      const pubDate   = item.querySelector('pubDate')?.textContent || '';
+      const numMatch  = title.match(/[\u3010\[#](\d+)[\u3011\]]/);
+      const number    = numMatch ? parseInt(numMatch[1]) : (items.length - i);
+      return { title, source, pubDate, number };
+    });
+    curEps.sort((a,b) => a.number - b.number);
     curShow = show;
     document.getElementById('epCount').textContent = curEps.length + '回';
     renderEpList(curEps);
-    // 自動的に第1回を再生
     playEp(0);
   } catch(e) {
     document.getElementById('epList').innerHTML = `
